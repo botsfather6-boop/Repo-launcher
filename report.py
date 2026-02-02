@@ -1,6 +1,6 @@
-# report.py
+## report.py
 from pyrogram import Client
-from pyrogram.raw import functions, types
+from pyrogram.raw import functions, types # Ensure this is correct
 from pyrogram.errors import RPCError
 
 async def send_single_report(client: Client, chat_id: int | str, msg_id: int | None, reason_code: str, description: str):
