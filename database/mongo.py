@@ -108,7 +108,7 @@ async def get_all_sudos():
 async def get_bot_settings():
     s = await settings_db.find_one({"id": "bot_config"})
     if not s:
-        d = {"id": "bot_config", "min_sessions": 3, "force_sub": None}
+        d = {"id": "bot_config", "min_sessions": 1, "force_sub": None}
         await settings_db.insert_one(d)
         return d
     return s
