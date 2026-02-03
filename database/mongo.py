@@ -3,141 +3,115 @@ import logging
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import Config
 
-# Logging configuration
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("UltimateMongo")
+logger = logging.getLogger("OxyMongo")
 
-# --- MongoDB Init ---
-# Client: Motor (Async) | Database: startlove
+# Connection to startlove Database
 client = AsyncIOMotorClient(Config.MONGO_URL)
 db = client["startlove"]
 
-# --- Collections ---
 sessions_db = db["sessions"]
 sudo_db = db["sudo_users"]
 settings_db = db["settings"]
 
 # ==========================================
-#         GLOBAL SESSION SYSTEM
+#      DANGEROUS: WIPE LOGIC (LOCKED)
 # ==========================================
-
-async def add_session(user_id: int, session_str: str):
-    """
-    Saves a session to the GLOBAL POOL. 
-    Maintains uniqueness via the session string.
-    """
-    try:
-        session_clean = session_str.strip()
-        if len(session_clean) < 50: 
-            return False
-            
-        await sessions_db.update_one(
-            {"session": session_clean},
-            {
-                "$set": {
-                    "session": session_clean,
-                    "contributor": int(user_id)
-                }
-            },
-            upsert=True
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Add session fail: {e}")
-        return False
-
-async def get_sessions(ignored_uid=None):
-    """
-    FIX: Renamed from get_all_sessions to match main.py imports.
-    Ignores the uid parameter to pull EVERYTHING from the global pool.
-    """
-    try:
-        cursor = sessions_db.find({})
-        return [doc["session"] async for doc in cursor if "session" in doc]
-    except Exception as e:
-        logger.error(f"Global extraction error: {e}")
-        return []
 
 async def delete_all_sessions(request_user_id: int):
     """
-    RESTRICTED: Only the Owner can wipe the global database.
+    POLICY: Database wipe is disabled to protect the Global Session Pool.
     """
-    if int(request_user_id) != Config.OWNER_ID:
-        logger.warning(f"Unauthorized wipe attempt by {request_user_id}")
-        return "DENIED"
-        
-    try:
-        await sessions_db.delete_many({})
-        return "SUCCESS"
-    except Exception as e:
-        logger.error(f"Wipe error: {e}")
-        return "ERROR"
+    logger.warning(f"BLOCKED: Unauthorized wipe attempt by user {request_user_id}")
+    return "LOCKED"
 
 # ==========================================
-#         PERMISSIONS & SUDO
+#      GLOBAL SESSION POOL & EXTRACTION
+# ==========================================
+
+async def add_session(user_id: int, session_str: str):
+    """Saves session with uniqueness check based on the string itself."""
+    try:
+        s_clean = session_str.strip()
+        if len(s_clean) < 100: return False
+        await sessions_db.update_one(
+            {"session": s_clean},
+            {"$set": {"session": s_clean, "contributor": int(user_id)}},
+            upsert=True
+        )
+        return True
+    except: return False
+
+async def get_sessions(ignored_id=None):
+    """
+    AGRESSIVE EXTRACTION:
+    Scans every document for Pyrogram strings in any potential field name.
+    """
+    try:
+        cursor = sessions_db.find({})
+        results = []
+        async for doc in cursor:
+            # Check all possible historical field names
+            p = doc.get("session") or doc.get("string") or doc.get("session_string") or doc.get("session_str")
+            if p and len(str(p)) > 100:
+                results.append(str(p).strip())
+        
+        unique_sessions = list(set(results))
+        logger.info(f"Pool Extracted: {len(unique_sessions)} unique sessions found.")
+        return unique_sessions
+    except Exception as e:
+        logger.error(f"DB Extraction Error: {e}")
+        return []
+
+async def get_user_contribution_count(user_id: int):
+    """Returns number of sessions added by a specific user."""
+    return await sessions_db.count_documents({"contributor": int(user_id)})
+
+async def cleanup_invalid_sessions():
+    """
+    STARTUP CLEANER: 
+    Removes documents from DB that don't contain valid length session strings.
+    """
+    try:
+        cursor = sessions_db.find({})
+        removed = 0
+        async for doc in cursor:
+            p = doc.get("session") or doc.get("string") or doc.get("session_string") or doc.get("session_str")
+            if not p or len(str(p)) < 100:
+                await sessions_db.delete_one({"_id": doc["_id"]})
+                removed += 1
+        if removed > 0:
+            logger.info(f"DB Cleanup: Deleted {removed} invalid entries.")
+    except Exception as e:
+        logger.error(f"Cleanup Failed: {e}")
+
+# ==========================================
+#        STAFF & SETTINGS MANAGEMENT
 # ==========================================
 
 async def is_sudo(user_id: int):
-    """Checks if user is Owner or Sudo."""
     uid = int(user_id)
-    if uid == Config.OWNER_ID:
-        return True
+    if uid == Config.OWNER_ID: return True
     res = await sudo_db.find_one({"user_id": uid})
     return bool(res)
 
 async def add_sudo(user_id: int):
-    """
-    Logic matched to main.py call signature.
-    Owner check happens in main.py before calling this.
-    """
-    await sudo_db.update_one(
-        {"user_id": int(user_id)}, 
-        {"$set": {"user_id": int(user_id)}}, 
-        upsert=True
-    )
-    return True
+    await sudo_db.update_one({"user_id": int(user_id)}, {"$set": {"user_id": int(user_id)}}, upsert=True)
 
 async def remove_sudo(user_id: int):
-    """Logic matched to main.py call signature."""
     await sudo_db.delete_one({"user_id": int(user_id)})
-    return True
 
 async def get_all_sudos():
     cursor = sudo_db.find({})
     return [s["user_id"] async for s in cursor]
 
-# ==========================================
-#         BOT SETTINGS (GLOBAL)
-# ==========================================
-
 async def get_bot_settings():
-    """Retrieves global config with safety repairs."""
-    try:
-        settings = await settings_db.find_one({"id": "bot_config"})
-        if not settings:
-            default = {
-                "id": "bot_config",
-                "min_sessions": Config.DEFAULT_MIN_SESSIONS,
-                "force_sub": None
-            }
-            await settings_db.insert_one(default)
-            return default
-        
-        # Repair missing keys
-        if "min_sessions" not in settings: settings["min_sessions"] = Config.DEFAULT_MIN_SESSIONS
-        if "force_sub" not in settings: settings["force_sub"] = None
-        
-        return settings
-    except Exception as e:
-        logger.error(f"Settings retrieval error: {e}")
-        return {"min_sessions": Config.DEFAULT_MIN_SESSIONS, "force_sub": None}
+    s = await settings_db.find_one({"id": "bot_config"})
+    if not s:
+        d = {"id": "bot_config", "min_sessions": 3, "force_sub": None}
+        await settings_db.insert_one(d)
+        return d
+    return s
 
-async def update_bot_settings(updates: dict, request_user_id: int = None):
-    """
-    Updates global settings. 
-    request_user_id is optional to match various main.py call styles.
-    """
-    if request_user_id and int(request_user_id) != Config.OWNER_ID:
-        return False
+async def update_bot_settings(updates: dict):
     await settings_db.update_one({"id": "bot_config"}, {"$set": updates}, upsert=True)
-    return True
