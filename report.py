@@ -5,21 +5,22 @@ from pyrogram import Client
 from pyrogram.raw import functions, types
 from pyrogram.errors import RPCError, FloodWait, PeerIdInvalid, ChannelInvalid
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("OxyReport")
 
 async def send_single_report(client: Client, chat_id: int | str, msg_id: int | None, reason_code: str, description: str):
     """
-    ULTIMATE REPORT ENGINE v3.2: 
-    Fixed 'Initializing' hang and 'Peer ID Invalid' errors.
+    ULTIMATE REPORT ENGINE v3.5: 
+    Handles Peer Sync, FloodWait, and Message vs Profile reporting.
     """
     try:
         # 1. ROBUST PEER SYNC 
-        # Accounts must 'see' the chat before they can report it.
+        ping_id = chat_id
         try:
-            peer = await client.resolve_peer(chat_id)
+            # Direct resolve attempt
+            peer = await client.resolve_peer(ping_id)
         except (PeerIdInvalid, ChannelInvalid, KeyError, ValueError):
             try:
-                # Fallback: Force server fetch to sync Peer ID into session storage
+                # Force server fetch to sync Peer ID into session state
                 chat = await client.get_chat(chat_id)
                 peer = await client.resolve_peer(chat.id)
             except Exception as e:
@@ -41,7 +42,7 @@ async def send_single_report(client: Client, chat_id: int | str, msg_id: int | N
 
         # 3. EXECUTION LOGIC
         if msg_id:
-            # Report specific Message (t.me/chat/id)
+            # Report specific Message
             await client.invoke(
                 functions.messages.Report(
                     peer=peer,
@@ -51,7 +52,7 @@ async def send_single_report(client: Client, chat_id: int | str, msg_id: int | N
                 )
             )
         else:
-            # Report Entire Chat/Profile
+            # Report Entire Profile/Channel
             await client.invoke(
                 functions.account.ReportPeer(
                     peer=peer,
@@ -60,18 +61,17 @@ async def send_single_report(client: Client, chat_id: int | str, msg_id: int | N
                 )
             )
         
-        logger.info(f"Worker {client.name} - Success")
+        logger.info(f"Worker {client.name} - Action Success ✅")
         return True
 
     except FloodWait as e:
-        # CRITICAL: If Telegram asks to wait > 120s, skip this worker to keep reporting fast
+        # Skip worker if wait time is too long (>120s) to maintain wave speed
         if e.value > 120:
             logger.warning(f"Worker {client.name} - Skipping (FloodWait: {e.value}s)")
             return False
             
-        logger.warning(f"Worker {client.name} - Throttling ({e.value}s)")
+        logger.warning(f"Worker {client.name} - Sleeping {e.value}s")
         await asyncio.sleep(e.value)
-        # Final retry after sleep
         return await send_single_report(client, chat_id, msg_id, reason_code, description)
 
     except RPCError as e:
