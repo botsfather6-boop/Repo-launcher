@@ -117,7 +117,7 @@ async def start_handler(client, message: Message):
         else:
             kb.append([InlineKeyboardButton("➕ Contribute Sessions", callback_data="add_sess_p")])
 
-        welcome = f"💎 **Ultimate OxyReport Pro v3.5**\n\nWelcome back, **{message.from_user.first_name}**!\n"
+        welcome = f"💎 **Ultimate KarmaReport Pro v3.5**\n\nWelcome back, **{message.from_user.first_name}**!\n"
         if status == "MIN_CONTRIBUTION":
             welcome += f"\n⚠️ **Locked:** Contribute `{data}` more Pyrogram string to unlock Reporting."
         else:
