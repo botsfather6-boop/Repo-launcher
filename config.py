@@ -3,7 +3,7 @@ import os
 
 class Config:
     """
-    Ultimate OxyReport Pro v3.0 - Configuration Management
+    Ultimate KarmaReport Pro v3.0 - Configuration Management
     Set these values as Environment Variables on Heroku/VPS.
     """
     
