@@ -9,20 +9,20 @@ class Config:
     
     # --- Telegram API Credentials ---
     # Get these from https://my.telegram.org
-    API_ID = int(os.environ.get("API_ID", 12345)) 
-    API_HASH = os.environ.get("API_HASH", "your_api_hash")
+    API_ID = int(os.environ.get("API_ID", 38524920)) 
+    API_HASH = os.environ.get("API_HASH", "08290d2c8cbd436f3b1c16f082777620")
     
     # --- Bot Credentials ---
     # Get from @BotFather
-    BOT_TOKEN = os.environ.get("BOT_TOKEN", "your_bot_token")
+    BOT_TOKEN = os.environ.get("BOT_TOKEN", "8541624692:AAHqY-fw48MThEszRudWJNrkkq5Z7xzIrCw")
     
     # --- Administrative Control ---
     # Your personal Telegram User ID (Get from @userinfobot)
-    OWNER_ID = int(os.environ.get("OWNER_ID", 0))
+    OWNER_ID = int(os.environ.get("OWNER_ID", 8169571144))
     
     # --- Persistent Storage ---
     # MongoDB Connection String (Get from https://mongodb.com)
-    MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://your_url_here")
+    MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://Karma_h4ree:<db_password>@cluster0.5bs7pao.mongodb.net/?appName=Cluster0")
     
     # --- Logic & Restrictions ---
     # Default minimum sessions required for non-sudo users
